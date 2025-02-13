@@ -17,6 +17,6 @@ const doctorSchema = new mongoose.Schema({
   },
   date: { type: Date, default: Date.now },
   slots_booked: { type: Array, default: [] },
-});
+},{timestamps:true});
 
 module.exports = mongoose.model("Doctor", doctorSchema);

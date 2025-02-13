@@ -1,16 +1,44 @@
 const asyncHandler = require("express-async-handler");
 const bcrypt = require("bcrypt");
 const Doctor = require("../../models/doctorModel");
+const Jwt = require("jsonwebtoken");
 const { cloudinaryUploadImg } = require("../../services/cloudinary");
-const {addDoctorValidations} = require("../../middlewares/validations/doctorValidations/doctorsValidations")
+const {
+  addDoctorValidations,
+} = require("../../middlewares/validations/doctorValidations/doctorsValidations");
+const sendResponse = require("../../util/sendResponse");
+const sendError = require("../../util/sendError");
+//LOGIN ADMIN
+const generateToken = (email) => {
+  return Jwt.sign({ email,role:"admin" }, process.env.JWT_SECRET, { expiresIn: "30d" });
+};
+
+const loginAdmin = asyncHandler(async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (
+      email === process.env.ADMIN_EMAIL &&
+      password === process.env.ADMIN_PASSWORD 
+    ) {
+      const token = generateToken(email);
+
+      return sendResponse(res, 200, "Admin logged in successfully.", {
+        token,
+      });
+    } else {
+      return sendError(res, 401, "Invalid email or password.");
+    }
+  } catch (error) {
+    return sendError(res, 500, "An unexpected error occurred.", error);
+  }
+});
+
 const addDoctor = asyncHandler(async (req, res, next) => {
   try {
-    console.log("✅ addDoctorValidations:", addDoctorValidations);
-    console.log("✅ Request Body:", req.body);
-    // Validate request body
     const { error } = addDoctorValidations.validate(req.body);
     if (error) {
-      return res.status(400).json({ status: false, message: error.details[0].message });
+      return sendError(res, 400, error.details[0].message);
     }
 
     const {
@@ -26,28 +54,26 @@ const addDoctor = asyncHandler(async (req, res, next) => {
       available,
     } = req.body;
 
-    // Check if doctor already exists
     const existingDoctor = await Doctor.findOne({ email });
     if (existingDoctor) {
-      return res.status(409).json({ status: false, message: "Doctor Already Exists With This Email" });
+      return sendError(res, 409, "Doctor already exists with this email.");
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    let imageUrl = "";
-    if (req.file) {
-      try {
-        const cloudinaryResult = await cloudinaryUploadImg(req.file.path);
-        imageUrl = cloudinaryResult.url;
-      } catch (uploadError) {
-        return res.status(500).json({ status: false, message: "Failed To Upload Image", error: uploadError.message });
-      }
-    } else {
-      return res.status(400).json({ status: false, message: "Image is required" });
+    if (!req.file) {
+      return sendError(res, 400, "Image is required.");
     }
 
-    // Create Doctor
+    let imageUrl = "";
+    try {
+      const cloudinaryResult = await cloudinaryUploadImg(req.file.path);
+      imageUrl = cloudinaryResult.url;
+    } catch (uploadError) {
+      return sendError(res, 500, "Failed to upload image.", uploadError);
+    }
+
+    // Create new doctor record
     const doctor = new Doctor({
       name,
       email,
@@ -64,8 +90,6 @@ const addDoctor = asyncHandler(async (req, res, next) => {
     });
 
     await doctor.save();
-
-    // Create payload for response
     const payload = {
       id: doctor._id,
       name: doctor.name,
@@ -77,19 +101,16 @@ const addDoctor = asyncHandler(async (req, res, next) => {
       fees: doctor.fees,
       address: doctor.address,
       available: doctor.available,
-      image: doctor.image, // Fixed key name
+      image: doctor.image,
     };
 
-    return res.status(201).json({
-      status: true,
-      message: "Doctor Added Successfully",
-      data: payload,
-    });
+    return sendResponse(res, 201, "Doctor added successfully.", payload);
   } catch (error) {
-    next(error);
+    return sendError(res, 500, "An unexpected error occurred.", error);
   }
 });
 
 module.exports = {
   addDoctor,
+  loginAdmin,
 };

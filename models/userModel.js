@@ -9,6 +9,6 @@ const userSchema = new mongoose.Schema({
   address: { type: Object, default: {line1:'',line2:''} },
   dob:{type:String,default:"Not Selected"},
   phone: { type: String, default: '00000000000' },
-});
+},{timestamps:true});
 
 module.exports = mongoose.model("User",userSchema)
